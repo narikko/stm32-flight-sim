@@ -48,15 +48,21 @@
 I2C_HandleTypeDef hi2c2;
 
 UART_HandleTypeDef huart1;
+DMA_HandleTypeDef hdma_usart1_tx;
 
 /* USER CODE BEGIN PV */
 volatile int buttonPressed = 0;
 uint16_t BTN_Pin = GPIO_PIN_13;
+
+// DMA Telemetry buffer & completion flag
+TelemetryPacket tx_packet;
+volatile uint8_t uart_tx_ready = 1;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_I2C2_Init(void);
 static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
@@ -109,6 +115,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_I2C2_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
@@ -158,17 +165,23 @@ int main(void)
 		  pitch = pitch_filter.x;
 	  }
 
-	  TelemetryPacket packet;
-	  packet.header[0] = TELEMETRY_HEADER_BYTE1;
-	  packet.header[1] = TELEMETRY_HEADER_BYTE2;
-	  packet.pitch= pitch;
-	  packet.roll = roll;
-	  packet.button_state = (uint8_t)buttonPressed;
+	  if (uart_tx_ready) {
+		  uart_tx_ready = 0;
 
-	  // Checksum covers pitch (4) + roll (4) + button_state (1) = 9 bytes
-	  packet.checksum = Fletcher16_Calculate((uint8_t*)&packet.pitch, sizeof(float) * 2 + sizeof(uint8_t));
+		  tx_packet.header[0] = TELEMETRY_HEADER_BYTE1;
+		  tx_packet.header[1] = TELEMETRY_HEADER_BYTE2;
+		  tx_packet.pitch = pitch;
+		  tx_packet.roll = roll;
+		  tx_packet.button_state = (uint8_t)buttonPressed;
 
-	  HAL_UART_Transmit(&huart1, (uint8_t*)&packet, sizeof(TelemetryPacket), 50);
+		  tx_packet.checksum = Fletcher16_Calculate((uint8_t*)&tx_packet.pitch, sizeof(float) * 2 + sizeof(uint8_t));
+
+		  HAL_StatusTypeDef status = HAL_UART_Transmit_DMA(&huart1, (uint8_t*)&tx_packet, sizeof(TelemetryPacket));
+		  if (status != HAL_OK) {
+			  // If it returns HAL_BUSY or HAL_ERROR, reset the flag so it tries again
+		      uart_tx_ready = 1;
+		  }
+	  }
 
 	  HAL_Delay(10);
   }
@@ -322,6 +335,23 @@ static void MX_USART1_UART_Init(void)
 }
 
 /**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMAMUX1_CLK_ENABLE();
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Channel1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -361,7 +391,13 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+{
+    if (huart->Instance == USART1)
+    {
+        uart_tx_ready = 1;
+    }
+}
 /* USER CODE END 4 */
 
 /**

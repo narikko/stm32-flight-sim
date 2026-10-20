@@ -6,14 +6,25 @@ BAUD = 115200
 
 
 def fletcher16(data: bytes) -> int:
-  sum1, sum2 = 0xFF, 0xFF
-  for b in data:
-    sum1 = (sum1 + b) % 255
-    sum2 = (sum2 + sum1) % 255
-  return (sum2 << 8) | sum1
+    sum1 = 0xFF
+    sum2 = 0xFF
+
+    for b in data:
+        sum1 += b
+        sum2 += sum1
+
+    # End-around carry reduction matching C implementation
+    sum1 = (sum1 & 0xFF) + (sum1 >> 8)
+    sum2 = (sum2 & 0xFF) + (sum2 >> 8)
+
+    sum1 = (sum1 & 0xFF) + (sum1 >> 8)
+    sum2 = (sum2 & 0xFF) + (sum2 >> 8)
+
+    return (sum2 << 8) | sum1
 
 
 ser = serial.Serial(PORT, BAUD, timeout=1)
+ser.reset_input_buffer()
 print(f"Listening on {PORT}...")
 
 try:

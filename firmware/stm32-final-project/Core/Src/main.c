@@ -17,13 +17,14 @@
   */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
+#include <kalman2d.h>
 #include "main.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "arm_math.h"
 #include "stm32l4s5i_iot01_accelero.h"
-#include "kalman_filter.h"
+#include "stm32l4s5i_iot01_gyro.h"
 #include "telemetry.h"
 #include <string.h>
 #include <stdio.h>
@@ -53,6 +54,9 @@ DMA_HandleTypeDef hdma_usart1_tx;
 /* USER CODE BEGIN PV */
 volatile int buttonPressed = 0;
 uint16_t BTN_Pin = GPIO_PIN_13;
+
+Kalman2D kf_pitch;
+Kalman2D kf_roll;
 
 // DMA Telemetry buffer & completion flag
 TelemetryPacket tx_packet;
@@ -120,16 +124,27 @@ int main(void)
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
   BSP_ACCELERO_Init();
+  BSP_GYRO_Init();
 
+  Kalman2D_Init(&kf_pitch, 0.001f, 0.003f, 0.03f);
+  Kalman2D_Init(&kf_roll,  0.001f, 0.003f, 0.03f);
+
+  float gyroVal[3];
   int16_t acceleroVal[3];
+  const float dt = 0.01f; // 100 Hz loop -> 10 ms
 
   float pitch = 0.0f;
   float roll = 0.0f;
 
-  // Adjust parameters for precision
-  struct kstate roll_filter = {0.01f, 0.1f, 0.0f, 1.0f, 0.0f};
-  struct kstate pitch_filter = {0.01f, 0.1f, 0.0f, 1.0f, 0.0f};
+  BSP_ACCELERO_AccGetXYZ(acceleroVal);
+  float ax_init = (float)acceleroVal[0];
+  float ay_init = (float)acceleroVal[1];
+  float az_init = (float)acceleroVal[2];
 
+  kf_pitch.angle = atan2f(-ax_init, sqrtf(ay_init * ay_init + az_init * az_init)) * (180.0f / M_PI);
+  kf_roll.angle  = atan2f(ay_init,  sqrtf(ax_init * ax_init + az_init * az_init)) * (180.0f / M_PI);
+
+  uint32_t last_tick = HAL_GetTick();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -141,40 +156,39 @@ int main(void)
     /* USER CODE BEGIN 3 */
 	  // Get accelerometer data (X, Y, Z axes) and store it in acceleroVal array
 	  BSP_ACCELERO_AccGetXYZ(acceleroVal);
+	  BSP_GYRO_GetXYZ(gyroVal);
+
+	  // Convert gyro readings to deg/s
+	  float gx = gyroVal[0] / 1000.0f;
+	  float gy = gyroVal[1] / 1000.0f;
 
 	  // Convert raw accelerometer readings to floating-point values for calculations
 	  float ax = (float)acceleroVal[0];
 	  float ay = (float)acceleroVal[1];
 	  float az = (float)acceleroVal[2];
 
-	  // Compute denominator for pitch calculation: sqrt(ay^2 + az^2)
-	  float pitch_denom = sqrtf(ay * ay + az * az);
-	  // Compute denominator for roll calculation: sqrt(ax^2 + az^2)
-	  float roll_denom = sqrtf(ax * ax + az * az);
+	  float pitch_acc = atan2f(-ax, sqrtf(ay * ay + az * az)) * (180.0f / M_PI);
+	  float roll_acc  = atan2f(ay,  sqrtf(ax * ax + az * az)) * (180.0f / M_PI);
 
-	  // Calculate pitch angle (in degrees) using arctangent formula
-	  pitch = atan2f(-ax, pitch_denom) * (180.0f / M_PI);
-	  // Calculate roll angle (in degrees) using arctangent formula
-	  roll = atan2f(ay, roll_denom) * (180.0f / M_PI);
-
-	  // Update Kalman filters for roll and pitch angles (only update if no floating point exception occurs)
-	  if (kalmanFilter_update(&roll_filter, roll) == 0) {
-		  roll = roll_filter.x;
-	  }
-	  if (kalmanFilter_update(&pitch_filter, pitch) == 0) {
-		  pitch = pitch_filter.x;
-	  }
+	  pitch = Kalman2D_Update(&kf_pitch, pitch_acc, gy, dt);
+	  roll  = Kalman2D_Update(&kf_roll,  roll_acc,  gx, dt);
 
 	  if (uart_tx_ready) {
 		  uart_tx_ready = 0;
 
 		  tx_packet.header[0] = TELEMETRY_HEADER_BYTE1;
 		  tx_packet.header[1] = TELEMETRY_HEADER_BYTE2;
-		  tx_packet.pitch = pitch;
-		  tx_packet.roll = roll;
+		  tx_packet.pitch_fused = pitch;
+		  tx_packet.pitch_raw   = pitch_acc;
+		  tx_packet.roll_fused  = roll;
+		  tx_packet.roll_raw    = roll_acc;
 		  tx_packet.button_state = (uint8_t)buttonPressed;
 
-		  tx_packet.checksum = Fletcher16_Calculate((uint8_t*)&tx_packet.pitch, sizeof(float) * 2 + sizeof(uint8_t));
+		  // Checksum covers 4 floats + 1 byte = 17 bytes
+		  tx_packet.checksum = Fletcher16_Calculate((uint8_t*)&tx_packet.pitch_fused,
+		                                            sizeof(float) * 4 + sizeof(uint8_t));
+
+		  HAL_UART_Transmit_DMA(&huart1, (uint8_t*)&tx_packet, sizeof(TelemetryPacket));
 
 		  HAL_StatusTypeDef status = HAL_UART_Transmit_DMA(&huart1, (uint8_t*)&tx_packet, sizeof(TelemetryPacket));
 		  if (status != HAL_OK) {
@@ -183,7 +197,9 @@ int main(void)
 		  }
 	  }
 
-	  HAL_Delay(10);
+	  // Precise 100 Hz rate keeper
+	  while ((HAL_GetTick() - last_tick) < 10){}
+	  last_tick += 10;
   }
   /* USER CODE END 3 */
 }

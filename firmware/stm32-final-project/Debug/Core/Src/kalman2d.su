@@ -1,0 +1,2 @@
+../Core/Src/kalman2d.c:3:6:Kalman2D_Init	24	static
+../Core/Src/kalman2d.c:17:7:Kalman2D_Update	56	static

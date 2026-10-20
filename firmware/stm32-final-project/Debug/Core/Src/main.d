@@ -1,5 +1,5 @@
-Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
- ../Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal.h \
+Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/kalman2d.h \
+ ../Core/Inc/main.h ../Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal.h \
  ../Core/Inc/stm32l4xx_hal_conf.h \
  ../Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal_rcc.h \
  ../Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal_def.h \
@@ -33,7 +33,8 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
  D:/space-motion-shooter/firmware/stm32-final-project/Drivers/Components/../Components/lsm6dsl/lsm6dsl.h \
  D:/space-motion-shooter/firmware/stm32-final-project/Drivers/Components/../Components/lsm6dsl/../Common/accelero.h \
  D:/space-motion-shooter/firmware/stm32-final-project/Drivers/Components/../Components/lsm6dsl/../Common/gyro.h \
- ../Core/Inc/kalman_filter.h ../Core/Inc/telemetry.h
+ ../Core/Inc/stm32l4s5i_iot01_gyro.h ../Core/Inc/telemetry.h
+../Core/Inc/kalman2d.h:
 ../Core/Inc/main.h:
 ../Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal.h:
 ../Core/Inc/stm32l4xx_hal_conf.h:
@@ -71,5 +72,5 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
 D:/space-motion-shooter/firmware/stm32-final-project/Drivers/Components/../Components/lsm6dsl/lsm6dsl.h:
 D:/space-motion-shooter/firmware/stm32-final-project/Drivers/Components/../Components/lsm6dsl/../Common/accelero.h:
 D:/space-motion-shooter/firmware/stm32-final-project/Drivers/Components/../Components/lsm6dsl/../Common/gyro.h:
-../Core/Inc/kalman_filter.h:
+../Core/Inc/stm32l4s5i_iot01_gyro.h:
 ../Core/Inc/telemetry.h:

@@ -11,6 +11,8 @@
 ## Overview
 A real-time 6-DOF attitude estimation pipeline and interactive flight visualization testbench built on the **STM32L4** (ARM Cortex-M4) microcontroller. The system fuses raw accelerometer and gyroscope data from an onboard **LSM6DSL** IMU using a custom discrete 2-state Kalman filter, offloading packet transmission asynchronously via **UART DMA** with **Fletcher-16** checksum verification.
 
+![STM32 Flight Sim Live Demo](docs/demo.gif)
+
 A Python-based telemetry broker ingests serial data, displays live quantitative Kalman vs. Raw orientation plots via Matplotlib, and re-broadcasts packets over local UDP loopback to drive a real-time 3D flight simulator in Unity.
 
 ```mermaid

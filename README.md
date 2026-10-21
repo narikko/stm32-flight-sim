@@ -13,27 +13,14 @@ A real-time 6-DOF attitude estimation pipeline and interactive flight visualizat
 
 A Python-based telemetry broker ingests serial data, displays live quantitative Kalman vs. Raw orientation plots via Matplotlib, and re-broadcasts packets over local UDP loopback to drive a real-time 3D flight simulator in Unity.
 
-[ LSM6DSL 6-DOF IMU ]
-         │
-         │  I2C @ 400 kHz (Synchronous Read)
-         ▼
-[ STM32L4 (ARM Cortex-M4) ]
-   ├── SysTick-Anchored 100 Hz Superloop (10 ms Frame Budget)
-   ├── Discrete 2-State Kalman Filter (State & Gyro Bias Estimation)
-   └── Hardware Pushbutton (PC13) Mode Toggle (Filtered vs. Raw)
-         │
-         │  Asynchronous UART TX via DMA (< 1 µs CPU trigger, 115200 Baud)
-         ▼  Structured 21-Byte Packets + Fletcher-16 Checksum
-[ Python Telemetry Hub ]
-   ├── Real-Time Matplotlib Visualization (Pitch/Roll: Raw vs. Kalman)
-   └── UDP Broadcast (127.0.0.1:5005)
-         │
-         ▼
-[ Unity 3D Flight Simulator ]
-   ├── Thread-Safe UDP Socket Ingestion
-   ├── Dynamic Aircraft Kinematics (Pitch, Roll, Coordinated Banking)
-   └── Live On-Screen HUD Telemetry
-   
+```mermaid
+flowchart TD
+    IMU["LSM6DSL 6-DOF IMU"] -->|I2C @ 400 kHz| MCU["STM32L4 (ARM Cortex-M4)<br/>• 100 Hz SysTick Superloop<br/>• 2-State Discrete Kalman Filter<br/>• PC13 Pushbutton Mode Switch"]
+    MCU -->|UART DMA @ 115200<br/>21-Byte Packet + Fletcher-16| Py["Python Telemetry Hub"]
+    Py -->|Real-Time Matplotlib| Plot["Live Quantitative Plot<br/>(Raw vs. Kalman)"]
+    Py -->|UDP Broadcast :5005| Unity["Unity 3D Flight Simulator<br/>• Kinematics & Banking<br/>• Real-Time On-Screen HUD"]
+```
+
 ## How to Run
 
 ### 1. Flash the Firmware

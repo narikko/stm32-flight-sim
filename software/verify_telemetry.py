@@ -1,12 +1,19 @@
+from collections import deque
+import socket
 import struct
 import threading
-from collections import deque
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import serial
 
+# Serial Configuration
 PORT = "COM5"  # Match your ST-Link port
 BAUD = 115200
+
+# UDP Broadcast Configuration (Forwarding to Unity)
+UNITY_IP = "127.0.0.1"
+UNITY_PORT = 5005
+udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 # 2 header bytes + 4 floats (p_fused, p_raw, r_fused, r_raw) + 1 byte (btn) + 2 bytes (chk) = 21 bytes
 PACKET_FORMAT = "<BBffffBH"
@@ -39,6 +46,9 @@ def serial_reader():
     ser = serial.Serial(PORT, BAUD, timeout=1)
     ser.reset_input_buffer()
     print(f"Connected to {PORT} at {BAUD} baud.")
+    print(
+        f"Forwarding valid frames over UDP to {UNITY_IP}:{UNITY_PORT}..."
+    )
   except Exception as e:
     print(f"Error opening serial port: {e}")
     return
@@ -48,10 +58,7 @@ def serial_reader():
     if len(header_candidate) < 2:
       continue
 
-    if (
-        header_candidate[0] == HEADER[0]
-        and header_candidate[1] == HEADER[1]
-    ):
+    if header_candidate[0] == HEADER[0] and header_candidate[1] == HEADER[1]:
       payload_and_chk = ser.read(PACKET_SIZE - 2)
       if len(payload_and_chk) < (PACKET_SIZE - 2):
         continue
@@ -63,6 +70,13 @@ def serial_reader():
       recv_chk = fields[7]
 
       if calc_chk == recv_chk:
+        # Rebroadcast entire 21-byte frame over UDP to Unity loopback
+        try:
+          udp_sock.sendto(full_packet, (UNITY_IP, UNITY_PORT))
+        except Exception:
+          pass
+
+        # Update local Matplotlib buffers
         p_fused, p_raw, r_fused, r_raw = (
             fields[2],
             fields[3],
